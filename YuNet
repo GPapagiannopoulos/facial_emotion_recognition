@@ -1,0 +1,29 @@
+import cv2 
+import numpy as np
+detector = cv2.FaceDetectorYN.create("C:/Users/George/Downloads/yunet_n_320_320.onnx", "", (640,640))
+
+cam = cv2.VideoCapture(0)
+frame_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
+frame_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+last_known = (0,0,0,0)
+while True:
+    ret, img = cam.read()
+    detector.setInputSize((frame_width, frame_height))
+    _, faces = detector.detect(img)
+    
+    if faces is not None:
+        for face in faces:
+            box = list(map(int, face[:4]))
+            cv2.rectangle(img, box, (0, 0, 255), 5)
+            last_known = box
+    else:
+        cv2.rectangle(img, last_known, (0, 0, 255), 5)
+
+    cv2.imshow('faces', img)
+
+    k = cv2.waitKey(30) & 0xff
+    if k== 27:
+        break
+cam.release()
+cv2.destroyAllWindows()
