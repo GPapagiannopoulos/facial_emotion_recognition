@@ -1,11 +1,17 @@
 import torch
+import cv2
+import numpy as np
 import torch.nn as nn
 from torchvision import transforms
 from torchvision.io import read_image
 
 # Paths 
 model_path = "C:/Users/George/OneDrive/Documents/Coding Projects/MachineLearning/FER/Models/ResNetv1.0/model.pt"
-image_path = r"C:\Users\George\OneDrive\Pictures\Camera Roll\WIN_20241108_12_03_57_Pro.jpg"
+image_path = "C:/Users/George/OneDrive/Pictures/Camera Roll\WIN_20241108_12_03_57_Pro.jpg"
+yunet_path = "C:/Users/George/Downloads/yunet_n_320_320.onnx"
+
+# YuNet initialization
+detector = cv2.FaceDetectorYN.create(yunet_path, "", (640,640))
 
 # Emotion array 
 emotions = ["anger", "contempt", "disgust", "fear", "happy", "neutral", "sad", "surprise"]
@@ -98,8 +104,9 @@ std = [66.0843/255.0, 60.0459/255.0, 58.1655/255.0]
 
 normalize = transforms.Normalize(mean=mean, std = std)
 transform = transforms.Compose([
+    transforms.ToTensor(),
     transforms.Resize((224,224)),
-    normalize
+    #normalize
 ])
 
 # Loading in the model and preparing it for inference 
@@ -113,10 +120,13 @@ def load_model(model_path):
 
     return model 
 
+# Instantiate our model 
+resnet = load_model(model_path)
+
 # Image preprocessing 
-def prepare_image(image_path):
+def prepare_image(image):
     # Load the image 
-    image = read_image(image_path).type(torch.float32)
+    #image = read_image(image_path).type(torch.float32)
     # Transform the image into valid input 
     image = transform(image).to(device)
     # Unsqueeze the image to account for individual image input rather than batches 
@@ -125,11 +135,11 @@ def prepare_image(image_path):
     return image 
 
 # Predict image 
-def predict_image(model_path, image_path):
+def predict_image(model, image):
     
-    model = load_model(model_path)
+    model = model
     
-    image = prepare_image(image_path)
+    image = prepare_image(image)
 
     prediction = model(image).flatten().tolist()
 
@@ -138,5 +148,40 @@ def predict_image(model_path, image_path):
         pred_emotion = ("uncertain", 0.00)
     return pred_emotion
 
-prediction = predict_image(model_path, image_path)
-print(prediction)
+# Initialize the video capture 
+cam = cv2.VideoCapture(0)
+
+# Get the window dimensions 
+frame_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
+frame_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+# Initialize the last known face location 
+last_known = (0,0,0,0)
+
+# Loop for detecting the face
+while True:
+    ret, img = cam.read()
+    detector.setInputSize((frame_width, frame_height))
+    _, faces = detector.detect(img)
+    
+    if faces is not None:
+        for face in faces:
+            box = list(map(int, face[:4]))
+            cv2.rectangle(img, box, (0, 0, 255), 5)
+            last_known = box
+            crop = np.moveaxis((img[box[0]:box[0] + box[2], box[1]: box[1] + box[3]]), -1, 0)
+            try:
+                prediction = predict_image(resnet, crop)
+                cv2.putText(img, str(prediction), (last_known[0], last_known[1]), fontFace = cv2.FONT_HERSHEY_SIMPLEX, fontScale = 1, color = (0,0,255), thickness=2, lineType=2) 
+            except:
+                continue 
+    else:
+        cv2.rectangle(img, last_known, (0, 0, 255), 5)
+
+    cv2.imshow('faces', img)
+
+    k = cv2.waitKey(30) & 0xff
+    if k== 27:
+        break
+cam.release()
+cv2.destroyAllWindows()

@@ -2,14 +2,12 @@ import os
 import numpy as np 
 import torch 
 import torch.nn as nn 
-import pandas as pd 
-import matplotlib.pyplot as plt 
+import pandas as pd
+import cv2
 from tqdm import tqdm
-from torchvision import datasets 
-from torchvision import transforms
+from torchvision.transforms import v2
 from torchvision.io import read_image
 from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler 
 
 #Configure device 
@@ -17,6 +15,13 @@ if torch.cuda.is_available():
     device = 'cuda'
 else:
     device = 'cpu'
+
+# Paths to model and dataset folders 
+model_path = "C:/Users/George/OneDrive/Documents/Coding Projects/MachineLearning/FER/Models/ResNetv1.1/model.pt"
+model_state_dict_path = "C:/Users/George/OneDrive/Documents/Coding Projects/MachineLearning/FER/Models/ResNetv1.1/state_dict.pt"
+label_file = "C:/Users/George/OneDrive/Documents/Coding Projects/Datasets/emotion recognition/data/labels.csv"
+image_dir = "C:/Users/George/OneDrive/Documents/Coding Projects/Datasets/emotion recognition/data\AffectNet/"
+
 
 # Loading a custom dataset
 class FacialExpressionDataset(Dataset):
@@ -39,8 +44,8 @@ class FacialExpressionDataset(Dataset):
         return image, label
 
 # Initialize the facial expression dataset
-facial_expressions = FacialExpressionDataset(annotations_file = "C:/Users/George/OneDrive/Documents/Coding Projects/Datasets/emotion recognition/data/labels.csv",
-                                             img_dir = "C:/Users/George/OneDrive/Documents/Coding Projects/Datasets/emotion recognition/data\AffectNet/")
+facial_expressions = FacialExpressionDataset(annotations_file = label_file,
+                                             img_dir = image_dir)
 
 # The calculate statistics function returns the average value for each channel across all pixels
 def calculate_statistics():
@@ -57,8 +62,8 @@ def calculate_statistics():
 
 # The mean and std have already been calculated using the calulate_statistics() function
 # mean, std = calculate_statistics()
-mean = [136.0891/255.0, 110.6775/255.0,  98.6695/255.0]
-std = [66.0843/255.0, 60.0459/255.0, 58.1655/255.0]
+mean = [136.0891, 110.6775,  98.6695]
+std = [66.0843, 60.0459, 58.1655]
 
 # Set Parameters 
 batch_size = 128
@@ -68,14 +73,15 @@ valid_size = 0.1
 shuffle = True
 
 # Define normalization parameters 
-normalize = transforms.Normalize(mean= mean, std= std)
+normalize = v2.Normalize(mean= mean, std= std)
 
 # Define the transformations
-transform = transforms.Compose([
-    transforms.Resize((224,224)),
+transform = v2.Compose([
+    v2.RandomHorizontalFlip(0.4),
+    v2.Resize((224,224)),
     normalize
 ])
-target_transform = transforms.Compose(
+target_transform = v2.Compose(
                     [lambda x:torch.LongTensor([x]), # or just torch.tensor
                      lambda x:torch.nn.functional.one_hot(x,8)])
 
@@ -98,8 +104,8 @@ valid_sampler = SubsetRandomSampler(valid_idx)
 test_sampler = SubsetRandomSampler(test_idx)
 
 # Initialize the facial expression dataset with the transformations
-facial_expressions = FacialExpressionDataset(annotations_file = "C:/Users/George/OneDrive/Documents/Coding Projects/Datasets/emotion recognition/data/labels.csv",
-                                             img_dir = "C:/Users/George/OneDrive/Documents/Coding Projects/Datasets/emotion recognition/data\AffectNet/",
+facial_expressions = FacialExpressionDataset(annotations_file = label_file,
+                                             img_dir = image_dir,
                                              transform = transform, 
                                              target_transform = target_transform)
 
@@ -187,7 +193,7 @@ class ResNet(nn.Module):
 
 # Defining hyperparameters
 num_classes = 8
-num_epochs = 20
+num_epochs = 30
 learning_rate = 0.0005
 
 model = ResNet(ResidualBlock, [3, 4, 6, 4]).to(device)
@@ -253,5 +259,5 @@ with torch.no_grad():
 
     print('Accuracy of the network on the {} testing images: {:.3f} %'.format(3001, 100 * correct / total))
 
-torch.save(model, "C:/Users/George/OneDrive/Documents/Coding Projects/MachineLearning/FER/Models/ResNetv1.0/model.pt")
-torch.save(model.state_dict(), "C:/Users/George/OneDrive/Documents/Coding Projects/MachineLearning/FER/Models/ResNetv1.0/state_dict.pt")
+torch.save(model, model_path)
+torch.save(model.state_dict(), model_state_dict_path)
