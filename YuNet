@@ -16,13 +16,11 @@ while True:
             box = list(map(int, face[:4]))
             cv2.rectangle(img, box, (0, 0, 255), 5)
             last_known = box
-            crop = img[box[0]:box[0] + box[2], box[1]: box[1] + box[3]]
+            crop = img[box[1]: box[1] + box[3], box[0]: box[0] + box[2]]
     else:
         cv2.rectangle(img, last_known, (0, 0, 255), 5)
-        crop = img[last_known[0]: last_known[2], last_known[1]: last_known[3]]
 
-    cv2.imshow('faces', img)
-    cv2.imshow("crop", crop)
+    cv2.imshow('faces', crop)
 
     k = cv2.waitKey(30) & 0xff
     if k== 27:

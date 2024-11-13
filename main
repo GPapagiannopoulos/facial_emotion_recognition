@@ -1,14 +1,17 @@
 import torch
 import cv2
 import numpy as np
+import gc 
+from mss import mss
+import time 
 import torch.nn as nn
-from torchvision import transforms
+from torchvision.transforms import v2 
 from torchvision.io import read_image
 
 # Paths 
-model_path = "C:/Users/George/OneDrive/Documents/Coding Projects/MachineLearning/FER/Models/ResNetv1.0/model.pt"
-image_path = "C:/Users/George/OneDrive/Pictures/Camera Roll\WIN_20241108_12_03_57_Pro.jpg"
-yunet_path = "C:/Users/George/Downloads/yunet_n_320_320.onnx"
+model_path = "C:/Users/George/OneDrive/Documents/Coding Projects/MachineLearning/FER/Models/ResNetv1.2/model.pt"
+image_path = r"C:\Users\George\OneDrive\Pictures\George.Papagiannopoulos.jpg"
+yunet_path = "C:/Users/George/Downloads/yunet_n_640_640.onnx"
 
 # YuNet initialization
 detector = cv2.FaceDetectorYN.create(yunet_path, "", (640,640))
@@ -99,13 +102,14 @@ class ResNet(nn.Module):
 
 
 # Creating our transformation function to turn our images into valid input 
-mean = [136.0891/255.0, 110.6775/255.0,  98.6695/255.0]
-std = [66.0843/255.0, 60.0459/255.0, 58.1655/255.0]
+mean = [136.0891, 110.6775,  98.6695]
+std = [66.0843, 60.0459, 58.1655]
 
-normalize = transforms.Normalize(mean=mean, std = std)
-transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Resize((224,224)),
+normalize = v2.Normalize(mean=mean, std = std)
+transform = v2.Compose([
+    v2.ToImage(),
+    v2.ToDtype(torch.float32, scale=True),
+    v2.Resize((224,224)),
     #normalize
 ])
 
@@ -128,25 +132,30 @@ def prepare_image(image):
     # Load the image 
     #image = read_image(image_path).type(torch.float32)
     # Transform the image into valid input 
-    image = transform(image).to(device)
+    image = transform(image)
     # Unsqueeze the image to account for individual image input rather than batches 
-    image = image.unsqueeze(0)
+    image = image.unsqueeze(0).to(device)
     
     return image 
 
+# Number of emotions you wish to display 
+emotionsDisplayed = 1
+# Threshold for displaying an emotion 
+certainty = 2.0
+
 # Predict image 
 def predict_image(model, image):
-    
-    model = model
-    
-    image = prepare_image(image)
+    with torch.no_grad():
+        prediction = model(image).flatten().tolist()
 
-    prediction = model(image).flatten().tolist()
-
-    pred_emotion = [(x, round(i, 3)) for x, i in zip(emotions, prediction) if i >= 3]
+    pred_emotion = sorted([(x, round(i, 3)) for x, i in zip(emotions, prediction) if i >= certainty], key = lambda x: x[1], reverse=True)
     if not pred_emotion:
-        pred_emotion = ("uncertain", 0.00)
-    return pred_emotion
+        pred_emotion = [("uncertain", 0.00) * emotionsDisplayed]
+    
+    torch.cuda.empty_cache()
+    gc.collect()
+
+    return pred_emotion[:1]
 
 # Initialize the video capture 
 cam = cv2.VideoCapture(0)
@@ -157,6 +166,9 @@ frame_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
 # Initialize the last known face location 
 last_known = (0,0,0,0)
+
+# Start execution timer
+timer = time.perf_counter()
 
 # Loop for detecting the face
 while True:
@@ -169,12 +181,16 @@ while True:
             box = list(map(int, face[:4]))
             cv2.rectangle(img, box, (0, 0, 255), 5)
             last_known = box
-            crop = np.moveaxis((img[box[0]:box[0] + box[2], box[1]: box[1] + box[3]]), -1, 0)
+            crop = img[box[1]: box[1] + box[3], box[0]: box[0] + box[2]]
+            crop = cv2.cvtColor(crop, cv2.COLOR_RGB2BGR)
+            crop = np.swapaxes(np.swapaxes(crop, 1, 2),0, 1)
+            crop = torch.from_numpy(crop)
+            crop = transform(crop).unsqueeze(0).to(device)
             try:
                 prediction = predict_image(resnet, crop)
-                cv2.putText(img, str(prediction), (last_known[0], last_known[1]), fontFace = cv2.FONT_HERSHEY_SIMPLEX, fontScale = 1, color = (0,0,255), thickness=2, lineType=2) 
+                cv2.putText(img, str(prediction), (last_known[0], last_known[1]), fontFace = cv2.FONT_HERSHEY_SIMPLEX, fontScale = 1, color = (0,0,255), thickness=1, lineType=2)
             except:
-                continue 
+                continue
     else:
         cv2.rectangle(img, last_known, (0, 0, 255), 5)
 
@@ -183,5 +199,5 @@ while True:
     k = cv2.waitKey(30) & 0xff
     if k== 27:
         break
-cam.release()
+
 cv2.destroyAllWindows()

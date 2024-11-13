@@ -3,12 +3,14 @@ import numpy as np
 import torch 
 import torch.nn as nn 
 import pandas as pd
-import cv2
+from torchsummary import summary
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 from torchvision.transforms import v2
 from torchvision.io import read_image
 from torch.utils.data import Dataset
 from torch.utils.data.sampler import SubsetRandomSampler 
+import torch.optim.lr_scheduler as lr_scheduler
 
 #Configure device 
 if torch.cuda.is_available():
@@ -17,10 +19,10 @@ else:
     device = 'cpu'
 
 # Paths to model and dataset folders 
-model_path = "C:/Users/George/OneDrive/Documents/Coding Projects/MachineLearning/FER/Models/ResNetv1.1/model.pt"
-model_state_dict_path = "C:/Users/George/OneDrive/Documents/Coding Projects/MachineLearning/FER/Models/ResNetv1.1/state_dict.pt"
+model_path = "C:/Users/George/OneDrive/Documents/Coding Projects/MachineLearning/FER/Models/ResNetv1.2/model.pt"
+model_state_dict_path = "C:/Users/George/OneDrive/Documents/Coding Projects/MachineLearning/FER/Models/ResNetv1.2/state_dict.pt"
 label_file = "C:/Users/George/OneDrive/Documents/Coding Projects/Datasets/emotion recognition/data/labels.csv"
-image_dir = "C:/Users/George/OneDrive/Documents/Coding Projects/Datasets/emotion recognition/data\AffectNet/"
+image_dir = "C:/Users/George/OneDrive/Documents/Coding Projects/Datasets/emotion recognition/data/AffectNet/"
 
 
 # Loading a custom dataset
@@ -66,7 +68,7 @@ mean = [136.0891, 110.6775,  98.6695]
 std = [66.0843, 60.0459, 58.1655]
 
 # Set Parameters 
-batch_size = 128
+batch_size = 64
 random_seed = 42
 training_size = 0.8
 valid_size = 0.1
@@ -193,22 +195,35 @@ class ResNet(nn.Module):
 
 # Defining hyperparameters
 num_classes = 8
-num_epochs = 30
-learning_rate = 0.0005
+num_epochs = 25
+learning_rate = 0.1
 
+# Instantiate model 
 model = ResNet(ResidualBlock, [3, 4, 6, 4]).to(device)
 
 #Loss and optimizer
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)  
+optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)  
+
+# Define learning rate schedule 
+def custom_lr(epoch):
+    base_lr = 0.1
+    factor = 0.01
+    return base_lr/(1+factor*epoch)
+scheduler = lr_scheduler.LambdaLR(optimizer, custom_lr)
 
 #Train the model
 import gc
 total_step = len(train_loader)
 
 torch.backends.cudnn.benchmark = True
+trainingEpochLoss = []
+validationEpochLoss = []
+
+print(summary(model.cuda(), (3, 224, 224)))
 
 for epoch in tqdm(range(num_epochs)):
+    training_loss = []
     for (images, labels) in tqdm(train_loader):  
       #Move tensors to the configured device
       images = images.to(device)
@@ -217,7 +232,7 @@ for epoch in tqdm(range(num_epochs)):
       #Forward pass
       outputs = model(images)
       loss = criterion(outputs, labels)
-
+      training_loss.append(loss.item())
       #Backward and optimize
       optimizer.zero_grad()
       loss.backward()
@@ -228,21 +243,30 @@ for epoch in tqdm(range(num_epochs)):
 
     print ('Epoch [{}/{}], Loss: {:.4f}' 
                  .format(epoch+1, num_epochs, loss.item()))
+    trainingEpochLoss.append(np.array(training_loss).mean())
 
   #Validation
     with torch.no_grad():
+      validation_loss = []
       correct = 0
       total = 0
       for images, labels in tqdm(valid_loader):
           images = images.to(device)
           labels = labels.to(device)
           outputs = model(images)
+          val_loss = criterion(outputs, labels)
+          validation_loss.append(val_loss.item())
           _, predicted = torch.max(outputs.data, 1)
           total += labels.size(0)
           correct += (predicted == labels).sum().item()
           del images, labels, outputs
 
-      print('Accuracy of the network on the {} validation images: {:.3f} %'.format(3000, 100 * correct / total))
+      print('Accuracy: {:.3f} %, Loss: {:.3f}'.format(100 * correct / total, val_loss.item()))
+    validationEpochLoss.append(np.array(validation_loss).mean())
+
+   # Checkpoint the model 
+    torch.save(model, model_path)
+    torch.save(model.state_dict(), model_state_dict_path)
 
 with torch.no_grad():
     model.eval()
@@ -259,5 +283,12 @@ with torch.no_grad():
 
     print('Accuracy of the network on the {} testing images: {:.3f} %'.format(3001, 100 * correct / total))
 
-torch.save(model, model_path)
-torch.save(model.state_dict(), model_state_dict_path)
+for name, param in model.named_parameters():
+    if param.requires_grad:
+        print (name, param.data)
+
+plt.plot(trainingEpochLoss, label='train_loss')
+plt.plot(validationEpochLoss,label='val_loss')
+plt.legend()
+plt.savefig("C:/Users/George/OneDrive/Documents/Coding Projects/MachineLearning/FER/Models/ResNetv1.2/loss")
+plt.show()
