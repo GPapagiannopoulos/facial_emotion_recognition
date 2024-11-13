@@ -1,0 +1,20 @@
+This project served as a proof of concept for AI powered tools to assist neurodiverse individuals with everyday tasks 
+
+It was inspired after interacting with friends whose neurodivergence made it difficult for them to understand the intentions of people through their facial expressions, particularly in online meetings and during watching movies. 
+
+This should come as no surprise as facial emotion recognition is a very challenging field within ML, with recent papers achieving around 75% accuracy on trying to predict 8 base emotions. Funnily enough, I myself didn't manage to score higher than that when going over some of the pictures in the dataset. 
+
+Brushing the concerns for dataset quality that this raises aside (believe me, I looked into it), this POC build is meant to showcase how a relatively simple ResNet implementation can achieve decent accuracy (~70% in this build) with a relatively small dataset (~25,000 training images), and subsequently use the trained model to assist in real time interpretation of facial expressions. 
+
+This first build struggles a bit with keeping up a frame rate, particularly in darker environments. It is however a step in the right direction! 
+
+There are plans to play around with the ML model powering this project in an effort to squeeze out some more accuracy for reliable predictions. Moreover I want to implement a screen capture component, so that rather using a camera, you can view your capture screen in real time. 
+
+On a more technical note, this is the thought process behind some of the decisions made:
+1) A ResNet architecture was chosen because of the complexity of the task, and a deep architecture was going to be necessary. Simple CNN without residual blocks didn't perform much worse (~63%) though, and are probably a reasonable choice if you do not want to implement a residual block. On the other end, there might be room for further improvements using some sort of Attention component. 
+2) SGD was chosen over Adam as Adam minimized loss by always returning the mean value. This caused a lot of frustration. 
+3) Pytorch was used instead of TensorFlow since TensorFlow no longer supports cuda on Windows machines. Despite experimenting a bit with WSL2 (as a matter of fact, the initial build of the ML model was on TF), the hassle proved too great, and I did not want to commit to fully switching to a Linux machine. Personally, I find the syntax of TF cleaner, however I did not see great differences in the actual computational efficiency. 
+4) opencv was used to capture the camera feed. For screen capturing, I would recommend mss. 
+5) YuNet was used for face detection as it is incredibly lightweight, runs on CPU (so it won't class with the model running on my GPU), and sufficiently accurate. 
+
+Happy Coding! :) 
