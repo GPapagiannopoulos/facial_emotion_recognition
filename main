@@ -139,7 +139,7 @@ def prepare_image(image):
     return image 
 
 # Number of emotions you wish to display 
-emotionsDisplayed = 1
+emotionsDisplayed = 2
 # Threshold for displaying an emotion 
 certainty = 2.0
 
@@ -155,7 +155,7 @@ def predict_image(model, image):
     torch.cuda.empty_cache()
     gc.collect()
 
-    return pred_emotion[:1]
+    return pred_emotion[:emotionsDisplayed]
 
 # Initialize the video capture 
 cam = cv2.VideoCapture(0)
@@ -188,7 +188,7 @@ while True:
             crop = transform(crop).unsqueeze(0).to(device)
             try:
                 prediction = predict_image(resnet, crop)
-                cv2.putText(img, str(prediction), (last_known[0], last_known[1]), fontFace = cv2.FONT_HERSHEY_SIMPLEX, fontScale = 1, color = (0,0,255), thickness=1, lineType=2)
+                cv2.putText(img, str(prediction), (last_known[0], last_known[1]), fontFace = cv2.FONT_HERSHEY_SIMPLEX, fontScale = 1, color = (0,0,255), thickness=2, lineType=2)
             except:
                 continue
     else:
